@@ -34,6 +34,8 @@ with tf.name_scope('Model'):
 with tf.name_scope('Loss'):
     cost = tf.reduce_mean(-tf.reduce_sum(y*tf.log(p), reduction_indices=1))
 
+init = tf.global_variables_initializer()
+
 with tf.name_scope('Optimizer'):
     #optimizer = tf.train.GradientDescentOptimizer(learning_rate).minimize(cost)
     optimizer = SimultaneousPerturbationOptimizer([x,y]).minimize(cost)
@@ -41,8 +43,6 @@ with tf.name_scope('Optimizer'):
 with tf.name_scope('Accuracy'):
     acc = tf.equal(tf.argmax(p, 1), tf.argmax(y, 1))
     acc = tf.reduce_mean(tf.cast(acc, tf.float32))
-
-init = tf.global_variables_initializer()
 
 # Variables for Tensorboard
 tf.summary.scalar("loss", cost)
