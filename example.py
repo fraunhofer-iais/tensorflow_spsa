@@ -9,7 +9,7 @@ logdir = 'data/log/run_{}'.format(time.time())
 mnist = input_data.read_data_sets("data/mnist", one_hot=True)
 
 # common training parameters
-training_epochs = 30
+training_epochs = 5
 batch_size = 100
 
 # Gradient Descent parameters
