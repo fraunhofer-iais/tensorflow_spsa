@@ -10,7 +10,7 @@ class SimultaneousPerturbationOptimizer(tf.train.Optimizer):
         self.input_ops = {op.name.encode('ascii','ignore'): op for op in input_ops}
         self.input_op_names = [str.split(n,':')[0] for n in self.input_ops.keys()]      # names of input ops wihtout :index
         self.work_graph = tf.get_default_graph() if graph is None else graph            # the graph to work on
-        self.orig_graph_view = ge.sgv(self.work_graph)                                  # make view of original graph (before creating any other ops!)
+        self.orig_graph_view = ge.sgv(self.work_graph)                                  # make view of original graph (before creating any other ops)
         self.global_step_tensor = tf.Variable(0, name='global_step', trainable=False) if global_step is None else global_step
 
         # optimizer parameters
@@ -38,7 +38,7 @@ class SimultaneousPerturbationOptimizer(tf.train.Optimizer):
                                     tf.scalar_mul(tf.constant(2, dtype=tf.float32), random.sample(1)[0] ))
                 c_t_delta = tf.scalar_mul(tf.reshape(self.c_t, []), delta)
                 nps[var.name] = tf.subtract(var, c_t_delta)
-                pps[var.name] = add_op = tf.add(var, c_t_delta)
+                pps[var.name] = tf.add(var, c_t_delta)
         return nps,pps
 
 
@@ -49,26 +49,65 @@ class SimultaneousPerturbationOptimizer(tf.train.Optimizer):
 
     def _clone_model(self, model, perturbations, dst_scope):
         ''' make a copy of model and connect the resulting sub-graph to
-            the input ops of the original graph.
+            input ops of the original graph and parameter assignments by
+            perturbator.
         '''
         def not_input_op_filter(op):
             return op.name not in self.input_op_names
 
-        ops_without_inputs = ge.filter_ops(model.ops, not_input_op_filter)
-        ops_without_inputs.remove(self.work_graph.get_operation_by_name("init"))
-        clone_sgv = ge.make_view(ops_without_inputs)
-        input_replacements = {orig : self.input_ops[orig.name] for orig in clone_sgv.inputs}  # replacements for input_ops
+        def not_placeholder_filter(op):
+            return not op.type == 'Placeholder'
 
+        def not_placeholder_trainvar_filter(op):
+            if op.type == 'Placeholder':
+                print "removing Placeholder {}".format(op.name)
+                self.input_ops[op.name.encode('ascii','ignore')] = op
+                return False
+            for s in self.tvars:
+                if op.name.startswith(s):
+                    print "removing trainable Variable {}".format(op.name)
+                    return False
+            return True
+
+        #self.input_ops = {}
+        self.tvars = []
+        print("Trainable variables:")
         for var in tf.trainable_variables():
-            print "making replacement for {}".format(var.op.name)
-            orig_init = ge.make_view(self.work_graph.get_operation_by_name(var.op.name+'/Assign'))
-            for op in orig_init.inputs:
-                if not op.name.split(':')[0] == var.op.name:
-                    input_replacements[orig_init] = perturbations[var.name]
-                    print "removing {}".format(op.name)
-                    #ops_without_inputs.remove(op)
+            var_name = var.name.split(':')[0]
+            print var_name
+            self.tvars.append(var_name)
 
-        clone_sgv = ge.make_view(ops_without_inputs)    # make new view now without initializers
+        #ops_without_inputs = ge.filter_ops(model.ops, not_input_op_filter)
+        #ops_without_inputs = ge.filter_ops(model.ops, not_placeholder_filter)
+        ops_without_inputs = ge.filter_ops(model.ops, not_placeholder_trainvar_filter)
+        #print ops_without_inputs
+        init = self.work_graph.get_operation_by_name("init")
+        ops_without_inputs.remove(init)
+        clone_sgv = ge.make_view(ops_without_inputs)
+        #input_replacements = {orig : self.input_ops[orig.name] for orig in clone_sgv.inputs}  # replacements for input_ops
+
+        print "---------------------"
+        print self.input_ops
+        print "---------------------"
+        print perturbations
+        print "---------------------"
+        input_replacements = {}
+        for op in clone_sgv.inputs:
+            print op.name
+            # rep = None
+            # if op.name in self.input_ops.keys():
+            #     rep = self.input_ops[op.name]
+            # else if op.name in perturbations.keys():
+            #     rep = perturbations[op.name]
+            # else
+
+
+        # for var in tf.trainable_variables():
+        #     print "making replacement for {} with {}".format(var.name, perturbations[var.name])
+        #     input_replacements[var] = perturbations[var.name]
+        #     ops_without_inputs.remove(var.op)
+        #
+        # clone_sgv = ge.make_view(ops_without_inputs)    # make new view now without initializers
         return ge.copy_with_input_replacements(clone_sgv, input_replacements, dst_scope=dst_scope)
 
 
