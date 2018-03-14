@@ -37,7 +37,7 @@ class SimultaneousPerturbationOptimizer(tf.train.Optimizer):
                                     tf.scalar_mul(tf.constant(2, dtype=tf.float32), random.sample(1)[0] ))
                 c_t_delta = tf.scalar_mul(tf.reshape(self.c_t, []), delta)
                 var_name = var.name.encode('ascii','ignore').split(':')[0]
-                nps[var_name+'/read:0'] = tf.subtract(var, c_t_delta)
+                nps[var_name+'/read:0'] = tf.subtract(var, c_t_delta)           # TODO: doesn't seem right to assume +'read:0'
                 pps[var_name+'/read:0'] = tf.add(var, c_t_delta)
         return nps,pps
 
@@ -48,10 +48,10 @@ class SimultaneousPerturbationOptimizer(tf.train.Optimizer):
             perturbator.
         '''
         def not_placeholder_or_trainvar_filter(op):
-            if op.type == 'Placeholder':
+            if op.type == 'Placeholder':            # perturbation sub-graphs will be fed from original placeholders
                 return False
             for var_name in self.tvars:
-                if op.name.startswith(var_name):            # remove Some/Var/(read,assign,...)
+                if op.name.startswith(var_name):      # remove Some/Var/(read,assign,...) -- will be replaced with perturbations
                     return False
             return True
 
@@ -73,5 +73,9 @@ class SimultaneousPerturbationOptimizer(tf.train.Optimizer):
         return ge.copy_with_input_replacements(clone_sgv, input_replacements, dst_scope=dst_scope)
 
 
-    def minimize(self, loss, global_step=None):
+    def minimize(self, loss):
+        return []
+
+
+    def get_perturbation_losses(self):
         return (self.ninfo.transformed(loss), self.pinfo.transformed(loss))
