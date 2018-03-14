@@ -37,8 +37,9 @@ class SimultaneousPerturbationOptimizer(tf.train.Optimizer):
                 delta = tf.subtract(tf.constant(1, dtype=tf.float32),
                                     tf.scalar_mul(tf.constant(2, dtype=tf.float32), random.sample(1)[0] ))
                 c_t_delta = tf.scalar_mul(tf.reshape(self.c_t, []), delta)
-                nps[var.name] = tf.subtract(var, c_t_delta)
-                pps[var.name] = tf.add(var, c_t_delta)
+                var_name = var.name.encode('ascii','ignore').split(':')[0]
+                nps[var_name] = tf.subtract(var, c_t_delta).op
+                pps[var_name] = tf.add(var, c_t_delta).op
         return nps,pps
 
 
@@ -69,7 +70,7 @@ class SimultaneousPerturbationOptimizer(tf.train.Optimizer):
                     return False
             return True
 
-        #self.input_ops = {}
+        self.input_ops = {}
         self.tvars = []
         print("Trainable variables:")
         for var in tf.trainable_variables():
@@ -93,13 +94,16 @@ class SimultaneousPerturbationOptimizer(tf.train.Optimizer):
         print "---------------------"
         input_replacements = {}
         for op in clone_sgv.inputs:
-            print op.name
-            # rep = None
-            # if op.name in self.input_ops.keys():
-            #     rep = self.input_ops[op.name]
-            # else if op.name in perturbations.keys():
-            #     rep = perturbations[op.name]
-            # else
+            op_name = op.name.split(':')[0]
+            print op_name
+            if op_name in self.input_ops.keys():
+                input_replacements[op_name] = self.input_ops[op_name]
+            elif op_name.endswith('/read') and op_name[:-5] in perturbations.keys():
+                input_replacements[op_name] = perturbations[op_name[:-5]]
+            else:
+                raise KeyError("Unable to find substitute for {}".format(op_name))
+
+        print input_replacements
 
 
         # for var in tf.trainable_variables():
