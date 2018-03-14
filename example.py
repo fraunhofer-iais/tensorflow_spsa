@@ -26,19 +26,21 @@ y = tf.placeholder(tf.float32, [None, 10], name='Labels')
 
 # model
 with tf.name_scope('Model'):
-    W = tf.Variable(tf.zeros([784, 10]), name='Weights')
-    b = tf.Variable(tf.zeros([10]), name='Bias')
+    #W = tf.Variable(tf.zeros([784, 10]), name='Weights')
+    #b = tf.Variable(tf.zeros([10]), name='Bias')
+    W = tf.Variable(tf.random_uniform([784, 10]), name='Weights')
+    b = tf.Variable(tf.random_uniform([10]), name='Bias')
     p = tf.nn.softmax(tf.matmul(x, W) + b)
 
 # objective
 with tf.name_scope('Loss'):
     cost = tf.reduce_mean(-tf.reduce_sum(y*tf.log(p), reduction_indices=1))
 
-init = tf.global_variables_initializer()
-
 with tf.name_scope('Optimizer'):
     #optimizer = tf.train.GradientDescentOptimizer(learning_rate).minimize(cost)
-    optimizer = SimultaneousPerturbationOptimizer([x,y]).minimize(cost)
+    nloss, ploss = SimultaneousPerturbationOptimizer().minimize(cost)
+    print nloss
+    print ploss
 
 with tf.name_scope('Accuracy'):
     acc = tf.equal(tf.argmax(p, 1), tf.argmax(y, 1))
@@ -48,6 +50,8 @@ with tf.name_scope('Accuracy'):
 tf.summary.scalar("loss", cost)
 tf.summary.scalar("accuracy", acc)
 merged_summary_op = tf.summary.merge_all()
+
+init = tf.global_variables_initializer()
 
 # Launch the graph
 with tf.Session() as sess:
@@ -63,7 +67,7 @@ with tf.Session() as sess:
             batch_xs, batch_ys = mnist.train.next_batch(batch_size)
             # Run optimization op, cost op (to get loss value)
             # and summary nodes
-            _, c, summary = sess.run([optimizer, cost, merged_summary_op],
+            cn, cp, c, summary = sess.run([nloss, ploss, cost, merged_summary_op],
                                      feed_dict={x: batch_xs, y: batch_ys})
             # Write logs at every iteration
             summary_writer.add_summary(summary, epoch * total_batch + i)
@@ -71,6 +75,7 @@ with tf.Session() as sess:
             avg_cost += c / total_batch
         # Display logs per epoch step
         print("Epoch:", '%04d' % (epoch+1), "cost=", "{:.9f}".format(avg_cost))
+        print("loss N: {}   loss P: {}".format(cn, cp))
 
     print("Finished!")
 
