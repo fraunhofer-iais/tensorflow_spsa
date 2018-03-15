@@ -9,7 +9,7 @@ logdir = 'data/log/run_{}'.format(time.time())
 mnist = input_data.read_data_sets("data/mnist", one_hot=True)
 
 # common training parameters
-training_epochs = 5
+training_epochs = 50
 batch_size = 100
 
 # Gradient Descent parameters
@@ -37,10 +37,8 @@ with tf.name_scope('Loss'):
     cost = tf.reduce_mean(-tf.reduce_sum(y*tf.log(p), reduction_indices=1))
 
 with tf.name_scope('Optimizer'):
-    #optimizer = tf.train.GradientDescentOptimizer(learning_rate).minimize(cost)
-    spsa_opti = SimultaneousPerturbationOptimizer()
-    optimizer = spsa_opti.minimize(cost)
-    nloss, ploss = spsa_opti.get_perturbation_losses()
+    optimizer = tf.train.GradientDescentOptimizer(learning_rate).minimize(cost)
+    #optimizer = SimultaneousPerturbationOptimizer().minimize(cost)
 
 with tf.name_scope('Accuracy'):
     acc = tf.equal(tf.argmax(p, 1), tf.argmax(y, 1))
@@ -67,7 +65,7 @@ with tf.Session() as sess:
             batch_xs, batch_ys = mnist.train.next_batch(batch_size)
             # Run optimization op, cost op (to get loss value)
             # and summary nodes
-            cn, cp, c, summary = sess.run([nloss, ploss, cost, merged_summary_op],
+            _, c, summary = sess.run([optimizer, cost, merged_summary_op],
                                      feed_dict={x: batch_xs, y: batch_ys})
             # Write logs at every iteration
             summary_writer.add_summary(summary, epoch * total_batch + i)
@@ -75,7 +73,6 @@ with tf.Session() as sess:
             avg_cost += c / total_batch
         # Display logs per epoch step
         print("Epoch:", '%04d' % (epoch+1), "cost=", "{:.9f}".format(avg_cost))
-        print("loss N: {}   loss P: {}".format(cn, cp))
 
     print("Finished!")
 
