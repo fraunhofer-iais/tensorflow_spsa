@@ -5,25 +5,17 @@ from tensorflow.contrib.distributions import Bernoulli
 
 class SimultaneousPerturbationOptimizer(tf.train.Optimizer):
 
-    def __init__(self, graph=None, var_list=None, a=0.01, c=0.01, alpha=1.0, gamma=0.4, global_step=None, use_locking=False, name="SPSA_Optimizer"):
+    def __init__(self, graph=None, var_list=None, a=0.01, c=0.01, alpha=1.0, gamma=0.4, use_locking=False, name="SPSA_Optimizer"):
         super(SimultaneousPerturbationOptimizer, self).__init__(use_locking, name)
         self.work_graph = tf.get_default_graph() if graph is None else graph                                # the graph to work on
         self.orig_graph_view = ge.sgv(self.work_graph)                                                      # make view of original graph (before creating any other ops)
         self.tvars = [var.name.encode('ascii','ignore').split(':')[0] for var in tf.trainable_variables()]  # list of names of trainable variables
-        self.global_step_tensor = tf.Variable(0, name='global_step', trainable=False) if global_step is None else global_step
 
         # optimizer parameters
         self.a = tf.constant(a, dtype=tf.float32)
         self.c = tf.constant(c, dtype=tf.float32)
         self.alpha = tf.constant(alpha, dtype=tf.float32)
         self.gamma = tf.constant(gamma, dtype=tf.float32)
-
-        # create sub-graph computing perturbations
-        n_perturbations, p_perturbations = self._make_perturbator()
-
-        # copy model
-        self.nsg, self.ninfo = self._clone_model(self.orig_graph_view, n_perturbations, 'N_Model')
-        self.psg, self.pinfo = self._clone_model(self.orig_graph_view, p_perturbations, 'P_Model')
 
 
     def _make_perturbator(self):
@@ -32,13 +24,13 @@ class SimultaneousPerturbationOptimizer(tf.train.Optimizer):
         with tf.name_scope("Perturbator"):
             self.c_t = self.c / tf.pow(tf.add(tf.cast(self.global_step_tensor, tf.float32), tf.constant(1, dtype=tf.float32)), self.gamma)
             for var in tf.trainable_variables():
+                var_name = var.name.encode('ascii','ignore').split(':')[0]+'/read:0'
                 random = Bernoulli(tf.fill(var.get_shape(), 0.5), dtype=tf.float32)
-                delta = tf.subtract(tf.constant(1, dtype=tf.float32),
+                self.delta = tf.subtract(tf.constant(1, dtype=tf.float32),
                                     tf.scalar_mul(tf.constant(2, dtype=tf.float32), random.sample(1)[0] ))
-                c_t_delta = tf.scalar_mul(tf.reshape(self.c_t, []), delta)
-                var_name = var.name.encode('ascii','ignore').split(':')[0]
-                nps[var_name+'/read:0'] = tf.subtract(var, c_t_delta)           # TODO: doesn't seem right to assume +'read:0'
-                pps[var_name+'/read:0'] = tf.add(var, c_t_delta)
+                c_t_delta = tf.scalar_mul(tf.reshape(self.c_t, []), self.delta)
+                nps[var_name] = tf.subtract(var, c_t_delta)
+                pps[var_name] = tf.add(var, c_t_delta)
         return nps,pps
 
 
@@ -73,9 +65,26 @@ class SimultaneousPerturbationOptimizer(tf.train.Optimizer):
         return ge.copy_with_input_replacements(clone_sgv, input_replacements, dst_scope=dst_scope)
 
 
-    def minimize(self, loss):
+    def minimize(self, loss, global_step=None):
+        self.loss = loss
+        self.global_step_tensor = tf.Variable(0, name='global_step', trainable=False) if global_step is None else global_step
+
+        # perturbations
+        n_perturbations, p_perturbations = self._make_perturbator()
+
+        # evaluator
+        with tf.name_scope("Evaluator"):
+            self.nsg, self.ninfo = self._clone_model(self.orig_graph_view, n_perturbations, 'N_Eval')
+            self.psg, self.pinfo = self._clone_model(self.orig_graph_view, p_perturbations, 'P_Eval')
+
+        # weight updates
+        with tf.control_dependencies([loss]):
+            with tf.name_scope('Updater'):
+                a_t = self.a / tf.pow(tf.add(tf.cast(self.global_step_tensor, tf.float32), tf.constant(1, dtype=tf.float32)), self.alpha)
+                for var in tf.trainable_variables():
+                    ghat = tf.subtract(self.pinfo.transformed(self.loss), self.ninfo.transformed(self.loss)) / (tf.constant(2, dtype=tf.float32) * self.c_t * self.delta)
         return []
 
 
     def get_perturbation_losses(self):
-        return (self.ninfo.transformed(loss), self.pinfo.transformed(loss))
+        return (self.ninfo.transformed(self.loss), self.pinfo.transformed(self.loss))

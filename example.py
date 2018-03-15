@@ -38,9 +38,9 @@ with tf.name_scope('Loss'):
 
 with tf.name_scope('Optimizer'):
     #optimizer = tf.train.GradientDescentOptimizer(learning_rate).minimize(cost)
-    nloss, ploss = SimultaneousPerturbationOptimizer().minimize(cost)
-    print nloss
-    print ploss
+    spsa_opti = SimultaneousPerturbationOptimizer()
+    optimizer = spsa_opti.minimize(cost)
+    nloss, ploss = spsa_opti.get_perturbation_losses()
 
 with tf.name_scope('Accuracy'):
     acc = tf.equal(tf.argmax(p, 1), tf.argmax(y, 1))
