@@ -26,8 +26,6 @@ y = tf.placeholder(tf.float32, [None, 10], name='Labels')
 
 # model
 with tf.name_scope('Model'):
-    #W = tf.Variable(tf.zeros([784, 10]), name='Weights')
-    #b = tf.Variable(tf.zeros([10]), name='Bias')
     W = tf.Variable(tf.random_uniform([784, 10]), name='Weights')
     b = tf.Variable(tf.random_uniform([10]), name='Bias')
     p = tf.nn.softmax(tf.matmul(x, W) + b)
@@ -37,8 +35,8 @@ with tf.name_scope('Loss'):
     cost = tf.reduce_mean(-tf.reduce_sum(y*tf.log(p), reduction_indices=1))
 
 with tf.name_scope('Optimizer'):
-    optimizer = tf.train.GradientDescentOptimizer(learning_rate).minimize(cost)
-    #optimizer = SimultaneousPerturbationOptimizer().minimize(cost)
+    #optimizer = tf.train.GradientDescentOptimizer(learning_rate).minimize(cost)
+    optimizer = SimultaneousPerturbationOptimizer().minimize(cost)
 
 with tf.name_scope('Accuracy'):
     acc = tf.equal(tf.argmax(p, 1), tf.argmax(y, 1))
