@@ -9,7 +9,7 @@ logdir = 'data/log/run_{}'.format(time.time())
 mnist = input_data.read_data_sets("data/mnist", one_hot=True)
 
 # common training parameters
-training_epochs = 50
+training_epochs = 5
 batch_size = 100
 
 # Gradient Descent parameters
@@ -37,8 +37,8 @@ with tf.name_scope('Loss'):
     cost = tf.reduce_mean(-tf.reduce_sum(y*tf.log(p), reduction_indices=1))
 
 with tf.name_scope('Optimizer'):
-    optimizer = tf.train.GradientDescentOptimizer(learning_rate).minimize(cost)
-    #optimizer = SimultaneousPerturbationOptimizer().minimize(cost)
+    #optimizer = tf.train.GradientDescentOptimizer(learning_rate).minimize(cost)
+    optimizer = SimultaneousPerturbationOptimizer().minimize(cost)
 
 with tf.name_scope('Accuracy'):
     acc = tf.equal(tf.argmax(p, 1), tf.argmax(y, 1))
